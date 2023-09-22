@@ -25,7 +25,7 @@ class Repository:
             raise Exception('Invalid Repository!')
         
     def fetch_repo_page(self):
-        page = requests.get(self.get_url)
+        page = requests.get(self.get_URL())
         return page.status_code, page.text
 
     def get_branch_name(self):
