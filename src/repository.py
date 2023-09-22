@@ -1,4 +1,5 @@
 import requests
+from commit import Commit
 from bs4 import BeautifulSoup
 
 
@@ -41,3 +42,6 @@ class Repository:
             }
         )[0].get_text()
         return branch_name
+    
+    def add_commit(self, commit : Commit):
+        self.commits.append(commit)
