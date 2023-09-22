@@ -46,9 +46,9 @@ class MultiThreadedCrawler:
 
     def get_repo_page(self):
         status_code, content = self.scrape_page(self.repository_url)
-        if status_code == -1:
+        if status_code != 200:
             # TODO: handle error
-            pass
+            raise NotImplemented()
         return content
 
     def scrape_page(self, url):
@@ -60,7 +60,8 @@ class MultiThreadedCrawler:
             return -1, e
     
     def run_web_crawler(self):
-        self.fill_queue()
+        commits = self.find_repo_commits_links()
+        # self.fill_queue(commits)
         while True:
             try:
                 print("\n Name of the current executing process: ",
@@ -78,6 +79,47 @@ class MultiThreadedCrawler:
             except Exception as e:
                 print(e)
                 continue
+
+    def find_repo_commits_links(self):
+        starting_commit_page_url = self.repository_url + f'/commits/{self.branch_name}'
+        status_code, content = self.scrape_page(starting_commit_page_url)
+        if status_code != 200:
+            # TODO: handle error
+            raise NotImplemented()
+        commit_list_page = BeautifulSoup(content, "xml")
+        button = self.get_button(commit_list_page)
+        commits = self.get_commits_links(commit_list_page)
+
+        while button.has_attr("disabled"):
+            status_code, content = self.scrape_page(starting_commit_page_url)
+            commit_list_page = BeautifulSoup(content, "xml") 
+            commits += self.get_commits_links(commit_list_page)
+            button = self.get_button(commit_list_page)
+        
+        return commits
+
+    def get_button(self, commit_list_page):
+        button = commit_list_page.find_all('a', class_='btn BtnGroup-item')
+        return button[-1]
+
+    def get_commits_links(commit_list_page):
+        timeline_items = commit_list_page.find_all("div", class_="TimelineItem-body")
+        commits = []
+        for item in timeline_items:
+            month, day, year = item.find_all("h2")[0].get_text().replace(',', '').split()[-3:]
+            item_commits = item.find_all("p", class_="mb-1")
+            relative_links = list(
+                map(
+                    lambda x:
+                        x.find('a', class_="Link--primary text-bold js-navigation-open markdown-title"), 
+                        item_commits
+                )
+            )
+            commits.append({
+                'date' : (month, day, year),
+                'relative_links' : relative_links
+            })
+        return commits
 
 
     def parse_links(self, html):
@@ -149,3 +191,5 @@ if __name__ == '__main__':
 
 # url = "https://github.com/mybatis/mybatis-3/commits/master"
 # find_commits_of_given_ripo(url)
+
+# <a class="Link--primary text-bold js-navigation-open markdown-title" href="/ityouknow/spring-boot-examples/commit/8897031cb6026de6d3366a482564e1ddfd465765">Merge pull request</a>
