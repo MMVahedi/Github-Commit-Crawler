@@ -1,4 +1,4 @@
-import multiprocessing, random, requests, logging
+import multiprocessing, random, requests, logging, datetime
 from bs4 import BeautifulSoup
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
@@ -102,25 +102,32 @@ class MultiThreadedCrawler:
         button = commit_list_page.find_all('a', class_='btn BtnGroup-item')
         return button[-1]
 
-    def get_commits_links(commit_list_page):
+    def parse_commits(self, commit_list_page):
         timeline_items = commit_list_page.find_all("div", class_="TimelineItem-body")
         commits = []
         for item in timeline_items:
-            month, day, year = item.find_all("h2")[0].get_text().replace(',', '').split()[-3:]
-            item_commits = item.find_all("p", class_="mb-1")
-            relative_links = list(
-                map(
-                    lambda x:
-                        x.find('a', class_="Link--primary text-bold js-navigation-open markdown-title"), 
-                        item_commits
-                )
-            )
-            commits.append({
-                'date' : (month, day, year),
-                'relative_links' : relative_links
-            })
-        return commits
+            list_items = item.find_all('li')
+            for li in list_items:
+                url = self.get_commit_url_from_list_item(li)
+                data = self.get_commit_date_from_list_item(li)
+        return list_items 
 
+    def get_commit_url_from_list_item(self, item):
+        relative_url = item.attrs['data-url']
+        relative_url = '/'.join(relative_url.split('/')[1:-1])   # Remove extra parts
+        return self.github_url + relative_url
+
+    def get_commit_date_from_list_item(self, item):
+        text = item.find('relative-time', class_='no-wrap').attrs['datetime']
+        date = {
+            'year': text[:4],
+            'month': text[5:7], 
+            'day': text[8:10],
+            'hour': text[11:13], 
+            'minutes': text[14:16], 
+            'seconds': text[17:19]
+        }
+        return datetime(*list(map(int,date.values())))
 
     def parse_links(self, html):
         soup = BeautifulSoup(html, 'html.parser')
