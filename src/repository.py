@@ -12,7 +12,7 @@ class Repository:
         self.name = name
         status_code, text = self.fetch_repo_page()
         self.is_ripo_valid(status_code)
-        self.page = BeautifulSoup(text, "xml")
+        self.page = BeautifulSoup(text, "lxml")
         self.branch = self.get_branch_name()
         self.commits = []
         Repository.All_Repositories.append(self)

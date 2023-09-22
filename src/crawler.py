@@ -1,4 +1,4 @@
-import random, requests, logging
+import random, requests, logging, re
 from bs4 import BeautifulSoup
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
@@ -52,7 +52,7 @@ class MultiThreadedCrawler:
             # TODO: handle error
             raise NotImplemented()
         
-        commit_list_page = BeautifulSoup(response.text, "xml")
+        commit_list_page = BeautifulSoup(response.text, "lxml")
         button = self.get_button(commit_list_page)
         self.parse_links(commit_list_page)
 
@@ -64,14 +64,11 @@ class MultiThreadedCrawler:
                 # TODO: handle error
                 raise NotImplemented()
 
-            commit_list_page = BeautifulSoup(response.text, "xml") 
+            commit_list_page = BeautifulSoup(response.text, "lxml") 
             self.parse_links(commit_list_page)
             button = self.get_button(commit_list_page)
 
     def get_button(self, commit_list_page):
-        f = open('te.html','w')
-        f.write(commit_list_page.prettify())
-        f.close()
         button = commit_list_page.find_all('a', class_='btn BtnGroup-item')
         if len(button) == 0 or button[-1].get_text() != 'Older':
             return None
@@ -87,8 +84,9 @@ class MultiThreadedCrawler:
                 self.crawl_queue.put(Commit(url, date))
 
     def get_commit_url_from_list_item(self, item):
-        relative_url = item.attrs['data-url']
-        relative_url = '/'.join(relative_url.split('/')[:-1])   # Remove extra parts
+        p = item.find('p', class_ = 'mb-1')
+        link = p.find('a')
+        relative_url = link.attrs['href']
         return Repository.Github_URL + relative_url
 
     def get_commit_date_from_list_item(self, item):
@@ -113,16 +111,53 @@ class MultiThreadedCrawler:
             raise NotImplemented
         
     def parse_commit(self, text):
-        print(text[:10])
+        page = BeautifulSoup(text, 'lxml')
+        message = self.get_message(page)
+        diff = self.get_diff(page)
 
+    def get_message(self, page):
+        # Commits Can also have description and branch
+        return page.find('div', {'class':['commit-title', 'markdown-title']}).get_text()
+
+    def get_diff(self, page):
+        diff_bar = page.find('div', class_= 'js-diff-progressive-container')
+        diff_items = diff_bar.findChildren('div', recursive=False)
+        diff_items_filtered = list(filter(
+            lambda item: (item.attrs['data-file-deleted'] == 'false') and (item.attrs['data-tagsearch-lang'] == 'Python'), 
+            diff_items
+        ))
+        diff_string = ''
+        for item in diff_items_filtered:
+            path = item.attrs['data-tagsearch-path']
+            diff_string += self.get_diff_string(item)
+        return diff_string
+        
+
+    def get_diff_string(self, item):
+        # TODO: I have ignored blob code (@@ ---- @@) and no-nl-marker (no entry sign) and context rows (rows that dont have + or - tag)
+        code_cell = item.find('div', class_ = 'js-file-content Details-content--hidden position-relative')
+        code_table = code_cell.find('table')
+        table_body = code_table.find('tbody')
+        table_rows = table_body.find_all('tr', class_ = 'show-top-border')
+        table_rows_code_column = list(map(lambda x : x.find_all('td')[-1].find('span'), table_rows))
+        codes = []
+        actions_symbols = []
+        for row in table_rows_code_column:
+            symbol = row.attrs['data-code-marker']
+            if symbol != ' ':
+                actions_symbols.append(symbol)
+                code = row.get_text()
+                codes.append(code)    
+        diff_string = ''
+        for symbol, code in zip(actions_symbols, codes):
+            if symbol != 'c':
+                diff_string += f'{symbol} {code}\n'
+        return diff_string
 
     # def info(self):
     #     print('\n Seed URL is: ', self.seed_url, '\n')
     #     print('Scraped pages are: ', self.scraped_pages, '\n')
  
-try: 
-    repo = Repository('MMVahedi','Github-Commit-Crawler')
-    cc = MultiThreadedCrawler(repo, 1)
-    cc.run_web_crawler()
-except Exception as e:
-    print(e[:10])
+repo = Repository('MMVahedi','Github-Commit-Crawler')
+cc = MultiThreadedCrawler(repo, 1)
+cc.run_web_crawler()

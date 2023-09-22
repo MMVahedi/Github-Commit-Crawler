@@ -9,5 +9,12 @@ class Commit:
         self.diff = diff
 
     def update(self, message : str, diff : str):
-        self.message = message
+        self.message = Commit.clean_message(message)
         self.diff = diff
+    
+    @classmethod
+    def clean_message(cls, message : str) -> str:
+        return message.replace('\n', ' ')
+    
+    
+
